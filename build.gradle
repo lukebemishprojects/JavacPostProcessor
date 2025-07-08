@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'java-library'
+}
+
+group = 'dev.lukebemish'
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm-tree:9.8'
+}
+
+tasks.named('compileJava', JavaCompile) {
+    options.compilerArgs += [
+            '--add-exports=jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor'
+    ]
+}
+
+tasks.named('javadoc', Javadoc) {
+    options.addMultilineStringsOption('-add-exports').value = [
+            'jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor',
+            'jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor',
+            'jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor'
+    ]
+}
+
+managedVersioning.mavenCentralUseBundle()
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            managedVersioning.pom(it, github_repo, license)
+            pom {
+                name = 'Javac Post Processor'
+                description = 'A javac plugin for post-processing classes with ASM.'
+            }
+        }
+    }
+}
+

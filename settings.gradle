@@ -1,0 +1,126 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven {
+            url "https://maven.lukebemish.dev/releases/"
+        }
+    }
+}
+
+plugins {
+    id 'dev.lukebemish.central-portal-publishing' version '0.1.7' apply false
+    id 'dev.lukebemish.managedversioning' version '2.0.0-beta.5'
+    id 'dev.lukebemish.conventions' version '0.2.0-beta.2'
+}
+
+managedVersioning {
+    versionFile.set file('version.properties')
+    versionPRs()
+    versionSnapshots()
+
+    publishing {
+        mavenStaging()
+        mavenSnapshot()
+        mavenPullRequest()
+        mavenCentralMakeBundle()
+    }
+
+    gitHubActions {
+        release {
+            prettyName = 'Release'
+            workflowDispatch = true
+            gradleJob {
+                javaVersion.set '21'
+                name.set 'build'
+                buildCache()
+                setupGitUser()
+                readOnly = false
+                gradlew 'Tag Release', 'tagRelease'
+                gradlew 'Build', 'build'
+                push()
+                recordVersion 'Record Version', 'version'
+                dependencySubmission()
+            }
+            gradleJob {
+                javaVersion.set '21'
+                name.set 'publishCentral'
+                buildCache()
+                needs.add('build')
+                gradlew 'Publish Central', 'publish'
+                tag.set('${{needs.build.outputs.version}}')
+                sign()
+                mavenCentral()
+                mavenStaging('github')
+            }
+            gradleJob {
+                javaVersion.set '21'
+                name.set 'publishPlugins'
+                buildCache()
+                needs.add('build')
+                gradlew 'Publish Plugins', 'publishPlugins'
+                tag.set('${{needs.build.outputs.version}}')
+                pluginPortal()
+            }
+        }
+        snapshot {
+            prettyName.set 'Snapshot'
+            workflowDispatch.set(true)
+            onBranches.add 'main'
+            gradleJob {
+                javaVersion.set '21'
+                name.set 'build'
+                buildCache()
+                cacheReadOnly = false
+                gradlew 'Build', 'build'
+                gradlew 'Publish', 'publish'
+                mavenSnapshot('github')
+            }
+        }
+        build_pr {
+            prettyName.set 'Build PR'
+            pullRequest.set(true)
+            gradleJob {
+                javaVersion.set '21'
+                name.set 'build'
+                gradlew 'Build', 'build'
+                gradlew 'Publish', 'publish'
+                pullRequestArtifact()
+            }
+        }
+        publish_pr {
+            prettyName.set 'Publish PR'
+            publishPullRequestAction(
+                'github',
+                "dev/lukebemish/javac-post-processor,dev/lukebemish/javac-post-processor/*",
+                'Build PR'
+            )
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+}
+
+gradle.lifecycle.beforeProject {
+    pluginManager.apply('maven-publish')
+    pluginManager.apply('signing')
+
+    tasks.withType(Sign).configureEach {
+        // Gradle broke something in 8.8 here, and now you can't publish plugins to other mavens if signing is disabled...
+        enabled System.getenv('GPG_KEY') !== null
+    }
+
+    publishing {
+        publications.configureEach {
+            managedVersioning.sign(signing, it)
+        }
+    }
+}
+
+include 'plugin'
+
+rootProject.name = 'javac-post-processor'

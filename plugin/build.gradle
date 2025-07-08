@@ -1,0 +1,33 @@
+plugins {
+    id 'java-gradle-plugin'
+    alias cLibs.plugins.gradlepublish
+    id 'java-library'
+}
+
+group = 'dev.lukebemish.javac-post-processor'
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+dependencies {
+    implementation gradleApi()
+}
+
+gradlePlugin {
+    website = 'https://github.com/lukebemishprojects/JavacPostProcessor'
+    vcsUrl = 'https://github.com/lukebemishprojects/JavacPostProcessor.git'
+
+    plugins {
+        javacPostProcessor {
+            id = 'dev.lukebemish.javac-post-processor'
+            displayName = 'Javac Post Processor'
+            description = 'A Gradle plugin applying a javac plugin to process Java source files after compilation using ASM.'
+            implementationClass = 'dev.lukebemish.javacpostprocessor.plugin.PostProcessorGradlePlugin'
+            tags.addAll(['javac'])
+        }
+    }
+}
