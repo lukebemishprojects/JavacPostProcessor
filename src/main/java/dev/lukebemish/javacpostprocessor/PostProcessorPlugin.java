@@ -88,7 +88,7 @@ public class PostProcessorPlugin implements Plugin {
                     } else {
                         fileLocation = StandardLocation.CLASS_OUTPUT;
                     }
-                    if (element.getKind() != ElementKind.MODULE) {
+                    if (element.getKind() != ElementKind.MODULE && !elements.getBinaryName(element).toString().contains("module-info")) {
                         // We specifically avoid processing module-info
                         var outFile = fileManager.getJavaFileForOutput(
                             fileLocation,
