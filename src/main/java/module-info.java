@@ -6,6 +6,6 @@ module dev.lukebemish.javacpostprocessor {
 
     exports dev.lukebemish.javacpostprocessor;
 
-    provides Plugin with PostProcessorPlugin;
-    uses PostProcessor;
+    provides Plugin with dev.lukebemish.javacpostprocessor.PostProcessorPlugin;
+    uses dev.lukebemish.javacpostprocessor.PostProcessor;
 }

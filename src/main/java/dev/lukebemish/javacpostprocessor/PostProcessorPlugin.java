@@ -10,6 +10,7 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ModuleElement;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
@@ -87,24 +88,27 @@ public class PostProcessorPlugin implements Plugin {
                     } else {
                         fileLocation = StandardLocation.CLASS_OUTPUT;
                     }
-                    var outFile = fileManager.getJavaFileForOutput(
+                    if (element.getKind() != ElementKind.MODULE) {
+                        // We specifically avoid processing module-info
+                        var outFile = fileManager.getJavaFileForOutput(
                             fileLocation,
                             elements.getBinaryName(element).toString(),
                             JavaFileObject.Kind.CLASS,
                             e.getSourceFile()
-                    );
+                        );
 
-                    var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-                    ClassVisitor visitor = writer;
-                    for (var processor : enabledProcessors) {
-                        visitor = processor.visit(visitor, elements.getBinaryName(element).toString(), fileManager, fileLocation);
-                    }
-                    if (visitor != writer) {
-                        try (var is = outFile.openInputStream()) {
-                            var reader = new ClassReader(is);
-                            reader.accept(visitor, 0);
-                            try (var os = outFile.openOutputStream()) {
-                                os.write(writer.toByteArray());
+                        var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+                        ClassVisitor visitor = writer;
+                        for (var processor : enabledProcessors) {
+                            visitor = processor.visit(visitor, elements.getBinaryName(element).toString(), fileManager, fileLocation);
+                        }
+                        if (visitor != writer) {
+                            try (var is = outFile.openInputStream()) {
+                                var reader = new ClassReader(is);
+                                reader.accept(visitor, 0);
+                                try (var os = outFile.openOutputStream()) {
+                                    os.write(writer.toByteArray());
+                                }
                             }
                         }
                     }
