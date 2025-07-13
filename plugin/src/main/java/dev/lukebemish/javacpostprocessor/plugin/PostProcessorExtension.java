@@ -17,7 +17,7 @@ public abstract class PostProcessorExtension {
             var plugins = getPlugins().get();
             var list = new ArrayList<String>();
             if (!plugins.isEmpty()) {
-                list.add("-Xplugin:\"dev.lukebemish.javac-post-processor "+String.join(" ", plugins)+"\"");
+                list.add("-Xplugin:dev.lukebemish.javac-post-processor "+String.join(" ", plugins));
             }
             return list;
         });
@@ -30,7 +30,7 @@ public abstract class PostProcessorExtension {
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor"
                 ));
-                // As gradle shoves everything onto the module classpath, we need to expose this to ALL-UNNAMED too
+                // As gradle shoves everything onto the non-module annotation classpath, we need to expose this to ALL-UNNAMED too
                 list.addAll(List.of(
                         "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
