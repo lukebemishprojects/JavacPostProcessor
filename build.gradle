@@ -13,7 +13,7 @@ java {
 }
 
 dependencies {
-    implementation 'org.ow2.asm:asm-tree:9.8'
+    api 'org.ow2.asm:asm-tree:9.8'
 }
 
 tasks.named('compileJava', JavaCompile) {
