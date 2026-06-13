@@ -13,8 +13,17 @@ public abstract class PostProcessorExtension {
     @SuppressWarnings("UnstableApiUsage")
     @Inject
     public PostProcessorExtension(JavaCompile task) {
+        var pluginsProp = getPlugins();
+        task.doFirst(t -> {
+            // Is this clean? No. Does it work? Yes. Is there a better way? Not... really
+            pluginsProp.disallowChanges();
+            if (!pluginsProp.get().isEmpty()) {
+                ((JavaCompile) t).getOptions().setFork(true);
+            }
+        });
         task.getOptions().getCompilerArgumentProviders().add(() -> {
-            var plugins = getPlugins().get();
+            pluginsProp.disallowChanges();
+            var plugins = pluginsProp.get();
             var list = new ArrayList<String>();
             if (!plugins.isEmpty()) {
                 list.add("-Xplugin:dev.lukebemish.javac-post-processor "+String.join(" ", plugins));
@@ -22,19 +31,22 @@ public abstract class PostProcessorExtension {
             return list;
         });
         task.getOptions().getForkOptions().getJvmArgumentProviders().add(() -> {
-            var plugins = getPlugins().get();
+            pluginsProp.disallowChanges();
+            var plugins = pluginsProp.get();
             var list = new ArrayList<String>();
             if (!plugins.isEmpty()) {
                 list.addAll(List.of(
                         "--add-exports=jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor",
-                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor"
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor",
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.main=dev.lukebemish.javacpostprocessor"
                 ));
                 // As gradle shoves everything onto the non-module annotation classpath, we need to expose this to ALL-UNNAMED too
                 list.addAll(List.of(
                         "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
-                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED"
                 ));
             }
             return list;

@@ -20,7 +20,8 @@ tasks.named('compileJava', JavaCompile) {
     options.compilerArgs += [
             '--add-exports=jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor',
             '--add-exports=jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor',
-            '--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor'
+            '--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.main=dev.lukebemish.javacpostprocessor'
     ]
 }
 
@@ -28,7 +29,8 @@ tasks.named('javadoc', Javadoc) {
     options.addMultilineStringsOption('-add-exports').value = [
             'jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor',
             'jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor',
-            'jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor'
+            'jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor',
+            'jdk.compiler/com.sun.tools.javac.main=dev.lukebemish.javacpostprocessor'
     ]
 }
 
