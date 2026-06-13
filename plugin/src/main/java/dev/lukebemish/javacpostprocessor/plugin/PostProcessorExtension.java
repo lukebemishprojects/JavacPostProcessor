@@ -38,13 +38,15 @@ public abstract class PostProcessorExtension {
                 list.addAll(List.of(
                         "--add-exports=jdk.compiler/com.sun.tools.javac.api=dev.lukebemish.javacpostprocessor",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=dev.lukebemish.javacpostprocessor",
-                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor"
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=dev.lukebemish.javacpostprocessor",
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.main=dev.lukebemish.javacpostprocessor"
                 ));
                 // As gradle shoves everything onto the non-module annotation classpath, we need to expose this to ALL-UNNAMED too
                 list.addAll(List.of(
                         "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
                         "--add-exports=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
-                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+                        "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED"
                 ));
             }
             return list;

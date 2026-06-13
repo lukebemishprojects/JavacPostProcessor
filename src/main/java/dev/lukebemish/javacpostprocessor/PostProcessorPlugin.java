@@ -5,6 +5,7 @@ import com.sun.source.util.Plugin;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.api.BasicJavacTask;
+import com.sun.tools.javac.main.JavaCompiler;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -73,6 +74,8 @@ public class PostProcessorPlugin implements Plugin {
                 try {
                     var taskCtx = ((BasicJavacTask) task).getContext();
                     var fileManager = taskCtx.get(JavaFileManager.class);
+                    var compiler = JavaCompiler.instance(taskCtx);
+                    var types = task.getTypes();
                     var classWriter = com.sun.tools.javac.jvm.ClassWriter.instance(taskCtx);
                     JavaFileManager.Location fileLocation;
                     if (classWriter.multiModuleMode) {
@@ -97,7 +100,29 @@ public class PostProcessorPlugin implements Plugin {
                             e.getSourceFile()
                         );
 
-                        var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+                        var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
+                            @Override
+                            protected String getCommonSuperClass(String type1, String type2) {
+                                Element element1 = compiler.resolveBinaryNameOrIdent(type1);
+                                Element element2 = compiler.resolveBinaryNameOrIdent(type2);
+                                if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
+                                    if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
+                                        return type2;
+                                    }
+                                    if (types.isAssignable(typeElement2.asType(), typeElement1.asType())) {
+                                        return type1;
+                                    }
+                                    if (typeElement1.getKind().isInterface() || typeElement2.getKind().isInterface()) {
+                                        return Object.class.getName();
+                                    }
+                                    do {
+                                        typeElement1 = (TypeElement) types.asElement(typeElement1.getSuperclass());
+                                    } while (!types.isAssignable(typeElement2.asType(), typeElement1.asType()));
+                                    return elements.getBinaryName(typeElement1).toString();
+                                }
+                                return super.getCommonSuperClass(type1, type2);
+                            }
+                        };
                         ClassVisitor visitor = writer;
                         for (var processor : enabledProcessors) {
                             visitor = processor.visit(visitor, elements.getBinaryName(element).toString(), fileManager, fileLocation);
