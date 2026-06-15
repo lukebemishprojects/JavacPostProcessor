@@ -1,11 +1,13 @@
 package dev.lukebemish.javacpostprocessor;
 
+import com.google.auto.service.AutoService;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.Plugin;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.api.BasicJavacTask;
 import com.sun.tools.javac.main.JavaCompiler;
+import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -16,6 +18,7 @@ import javax.lang.model.element.ModuleElement;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
@@ -26,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ServiceLoader;
 
+@AutoService(Plugin.class)
 public class PostProcessorPlugin implements Plugin {
     @Override
     public String getName() {
@@ -55,8 +59,25 @@ public class PostProcessorPlugin implements Plugin {
             throw new IllegalArgumentException("Post-processor(s) not present: " + String.join(", ", enabledNames));
         }
 
+        var context = new PostProcessor.Context() {
+            @Override
+            public JavacTask task() {
+                return task;
+            }
+
+            @Override
+            public CommonSuperClassFinder commonSuperClassFinder() {
+                Elements elements = task.getElements();
+                var taskCtx = ((BasicJavacTask) task).getContext();
+                var compiler = JavaCompiler.instance(taskCtx);
+                var types = task.getTypes();
+                return (class1, class2) -> attemptGetCommonSuperClass(types, elements, compiler, class1, class2);
+            }
+        };
+
         for (var processor : enabledProcessors) {
             processor.init(task);
+            processor.context(context);
         }
 
         task.addTaskListener(new TaskListener() {
@@ -74,8 +95,7 @@ public class PostProcessorPlugin implements Plugin {
                 try {
                     var taskCtx = ((BasicJavacTask) task).getContext();
                     var fileManager = taskCtx.get(JavaFileManager.class);
-                    var compiler = JavaCompiler.instance(taskCtx);
-                    var types = task.getTypes();
+                    var commonSuperClassFinder = context.commonSuperClassFinder();
                     var classWriter = com.sun.tools.javac.jvm.ClassWriter.instance(taskCtx);
                     JavaFileManager.Location fileLocation;
                     if (classWriter.multiModuleMode) {
@@ -103,22 +123,9 @@ public class PostProcessorPlugin implements Plugin {
                         var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
                             @Override
                             protected String getCommonSuperClass(String type1, String type2) {
-                                Element element1 = compiler.resolveBinaryNameOrIdent(type1);
-                                Element element2 = compiler.resolveBinaryNameOrIdent(type2);
-                                if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
-                                    if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
-                                        return type2;
-                                    }
-                                    if (types.isAssignable(typeElement2.asType(), typeElement1.asType())) {
-                                        return type1;
-                                    }
-                                    if (typeElement1.getKind().isInterface() || typeElement2.getKind().isInterface()) {
-                                        return Object.class.getName();
-                                    }
-                                    do {
-                                        typeElement1 = (TypeElement) types.asElement(typeElement1.getSuperclass());
-                                    } while (!types.isAssignable(typeElement2.asType(), typeElement1.asType()));
-                                    return elements.getBinaryName(typeElement1).toString();
+                                var found = commonSuperClassFinder.findCommonSuperClass(type1, type2);
+                                if (found != null) {
+                                    return found;
                                 }
                                 return super.getCommonSuperClass(type1, type2);
                             }
@@ -142,5 +149,26 @@ public class PostProcessorPlugin implements Plugin {
                 }
             }
         });
+    }
+
+    private static @Nullable String attemptGetCommonSuperClass(Types types, Elements elements, JavaCompiler compiler, String type1, String type2) {
+        Element element1 = compiler.resolveBinaryNameOrIdent(type1);
+        Element element2 = compiler.resolveBinaryNameOrIdent(type2);
+        if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
+            if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
+                return type2;
+            }
+            if (types.isAssignable(typeElement2.asType(), typeElement1.asType())) {
+                return type1;
+            }
+            if (typeElement1.getKind().isInterface() || typeElement2.getKind().isInterface()) {
+                return Object.class.getName();
+            }
+            do {
+                typeElement1 = (TypeElement) types.asElement(typeElement1.getSuperclass());
+            } while (!types.isAssignable(typeElement2.asType(), typeElement1.asType()));
+            return elements.getBinaryName(typeElement1).toString();
+        }
+        return null;
     }
 }
