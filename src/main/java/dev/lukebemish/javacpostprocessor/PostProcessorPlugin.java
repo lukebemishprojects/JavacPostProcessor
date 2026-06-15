@@ -152,8 +152,8 @@ public class PostProcessorPlugin implements Plugin {
     }
 
     private static @Nullable String attemptGetCommonSuperClass(Types types, Elements elements, JavaCompiler compiler, String type1, String type2) {
-        Element element1 = compiler.resolveBinaryNameOrIdent(type1);
-        Element element2 = compiler.resolveBinaryNameOrIdent(type2);
+        Element element1 = compiler.resolveBinaryNameOrIdent(type1.replace('/', '.'));
+        Element element2 = compiler.resolveBinaryNameOrIdent(type2.replace('/', '.'));
         if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
             if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
                 return type2;
@@ -162,12 +162,12 @@ public class PostProcessorPlugin implements Plugin {
                 return type1;
             }
             if (typeElement1.getKind().isInterface() || typeElement2.getKind().isInterface()) {
-                return Object.class.getName();
+                return Object.class.getName().replace('.', '/');
             }
             do {
                 typeElement1 = (TypeElement) types.asElement(typeElement1.getSuperclass());
             } while (!types.isAssignable(typeElement2.asType(), typeElement1.asType()));
-            return elements.getBinaryName(typeElement1).toString();
+            return elements.getBinaryName(typeElement1).toString().replace('.', '/');
         }
         return null;
     }
