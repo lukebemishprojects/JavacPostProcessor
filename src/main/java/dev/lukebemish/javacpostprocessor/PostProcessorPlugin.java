@@ -215,7 +215,7 @@ public class PostProcessorPlugin implements Plugin {
 
     private static @Nullable String attemptGetCommonSuperClass(Types types, Elements elements, JavaCompiler compiler, CapturingListener capturing, String type1, String type2) {
         Element element1 = getElementFromInternalName(type1, compiler, capturing, elements);
-        Element element2 = getElementFromInternalName(type1, compiler, capturing, elements);
+        Element element2 = getElementFromInternalName(type2, compiler, capturing, elements);
         if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
             if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
                 return type2;
