@@ -11,12 +11,16 @@ import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Type;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ModuleElement;
+import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.JavaFileManager;
@@ -25,8 +29,10 @@ import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.ServiceLoader;
 
 @AutoService(Plugin.class)
@@ -59,10 +65,50 @@ public class PostProcessorPlugin implements Plugin {
             throw new IllegalArgumentException("Post-processor(s) not present: " + String.join(", ", enabledNames));
         }
 
+        var capturing = new CapturingListener(task);
+
         var context = new PostProcessor.Context() {
             @Override
             public JavacTask task() {
                 return task;
+            }
+
+            @Override
+            public BinaryBridge binaryBridge() {
+                Elements elements = task.getElements();
+                var taskCtx = ((BasicJavacTask) task).getContext();
+                var compiler = JavaCompiler.instance(taskCtx);
+                var types = task.getTypes();
+                return new BinaryBridge() {
+                    @Override
+                    public @Nullable TypeElement elementByInternalName(String internalName) {
+                        return getElementFromInternalName(internalName, compiler, capturing, elements);
+                    }
+
+                    @Override
+                    public @Nullable TypeMirror typeByDescriptor(String descriptor) {
+                        return switch (descriptor.charAt(0)) {
+                            case 'Z' -> types.getPrimitiveType(TypeKind.BOOLEAN);
+                            case 'I' -> types.getPrimitiveType(TypeKind.INT);
+                            case 'B' -> types.getPrimitiveType(TypeKind.BYTE);
+                            case 'S' -> types.getPrimitiveType(TypeKind.SHORT);
+                            case 'C' -> types.getPrimitiveType(TypeKind.CHAR);
+                            case 'J' -> types.getPrimitiveType(TypeKind.LONG);
+                            case 'F' -> types.getPrimitiveType(TypeKind.FLOAT);
+                            case 'D' -> types.getPrimitiveType(TypeKind.DOUBLE);
+                            case 'V' -> types.getPrimitiveType(TypeKind.VOID);
+                            case '[' -> {
+                                var component = typeByDescriptor(descriptor.substring(1));
+                                yield component == null ? null : types.getArrayType(component);
+                            }
+                            case 'L' -> {
+                                var element = elementByInternalName(Type.getType(descriptor).getInternalName());
+                                yield element == null ? null : element.asType();
+                            }
+                            default -> null;
+                        };
+                    }
+                };
             }
 
             @Override
@@ -71,7 +117,7 @@ public class PostProcessorPlugin implements Plugin {
                 var taskCtx = ((BasicJavacTask) task).getContext();
                 var compiler = JavaCompiler.instance(taskCtx);
                 var types = task.getTypes();
-                return (class1, class2) -> attemptGetCommonSuperClass(types, elements, compiler, class1, class2);
+                return (class1, class2) -> attemptGetCommonSuperClass(types, elements, compiler, capturing, class1, class2);
             }
         };
 
@@ -149,11 +195,27 @@ public class PostProcessorPlugin implements Plugin {
                 }
             }
         });
+
+        task.addTaskListener(capturing);
     }
 
-    private static @Nullable String attemptGetCommonSuperClass(Types types, Elements elements, JavaCompiler compiler, String type1, String type2) {
-        Element element1 = compiler.resolveBinaryNameOrIdent(type1.replace('/', '.'));
-        Element element2 = compiler.resolveBinaryNameOrIdent(type2.replace('/', '.'));
+    private static @Nullable TypeElement getElementFromInternalName(String internalName, JavaCompiler compiler, CapturingListener capturing, Elements elements) {
+        // This approach _cannot_ find local/anonymous classes
+        Element element = compiler.resolveBinaryNameOrIdent(internalName.replace('/', '.'));
+        // However! Conveniently, such classes should be compiled in the same compilation as they are referenced!
+        // So we can capture 'em and feed 'em around as needed here
+        if (!(element instanceof TypeElement)) {
+            element = capturing.NESTED_TYPE_ELEMENTS.get(internalName.replace('/', '.'));
+        }
+        if (element instanceof TypeElement typeElement && elements.getBinaryName(typeElement).contentEquals(internalName.replace('/', '.'))) {
+            return typeElement;
+        }
+        return null;
+    }
+
+    private static @Nullable String attemptGetCommonSuperClass(Types types, Elements elements, JavaCompiler compiler, CapturingListener capturing, String type1, String type2) {
+        Element element1 = getElementFromInternalName(type1, compiler, capturing, elements);
+        Element element2 = getElementFromInternalName(type1, compiler, capturing, elements);
         if (element1 instanceof TypeElement typeElement1 && element2 instanceof TypeElement typeElement2) {
             if (types.isAssignable(typeElement1.asType(), typeElement2.asType())) {
                 return type2;
@@ -170,5 +232,29 @@ public class PostProcessorPlugin implements Plugin {
             return elements.getBinaryName(typeElement1).toString().replace('.', '/');
         }
         return null;
+    }
+
+    private static class CapturingListener implements TaskListener {
+        private final Map<String, TypeElement> NESTED_TYPE_ELEMENTS;
+        private final JavacTask task;
+
+        CapturingListener(JavacTask task) {
+            this.task = task;
+            NESTED_TYPE_ELEMENTS = new HashMap<>();
+        }
+
+        @Override
+        public void finished(TaskEvent e) {
+            if (e.getKind() == TaskEvent.Kind.GENERATE && e.getTypeElement().getNestingKind() == NestingKind.TOP_LEVEL) {
+                NESTED_TYPE_ELEMENTS.clear();
+            } else if (e.getKind() != TaskEvent.Kind.ANALYZE && e.getKind() != TaskEvent.Kind.GENERATE) {
+                return;
+            }
+            var typeElement = e.getTypeElement();
+            if (typeElement.getNestingKind() == NestingKind.ANONYMOUS || typeElement.getNestingKind() == NestingKind.LOCAL) {
+                String name = task.getElements().getBinaryName(typeElement).toString();
+                NESTED_TYPE_ELEMENTS.put(name, typeElement);
+            }
+        }
     }
 }

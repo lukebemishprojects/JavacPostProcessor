@@ -4,6 +4,9 @@ import com.sun.source.util.JavacTask;
 import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassVisitor;
 
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
 import javax.tools.JavaFileManager;
 
 public interface PostProcessor {
@@ -21,12 +24,18 @@ public interface PostProcessor {
     interface Context {
         JavacTask task();
         CommonSuperClassFinder commonSuperClassFinder();
+        BinaryBridge binaryBridge();
 
         /**
          * Attempts to locate a common superclass from two type internal names.
          */
         interface CommonSuperClassFinder {
             @Nullable String findCommonSuperClass(String class1, String class2);
+        }
+
+        interface BinaryBridge {
+            @Nullable TypeElement elementByInternalName(String internalName);
+            @Nullable TypeMirror typeByDescriptor(String descriptor);
         }
     }
 }
