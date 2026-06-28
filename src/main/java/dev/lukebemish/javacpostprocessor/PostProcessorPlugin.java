@@ -126,6 +126,8 @@ public class PostProcessorPlugin implements Plugin {
             processor.context(context);
         }
 
+        task.addTaskListener(capturing.addNested());
+
         task.addTaskListener(new TaskListener() {
             @Override
             public void finished(TaskEvent e) {
@@ -196,7 +198,7 @@ public class PostProcessorPlugin implements Plugin {
             }
         });
 
-        task.addTaskListener(capturing);
+        task.addTaskListener(capturing.clearPostTopLevel());
     }
 
     private static @Nullable TypeElement getElementFromInternalName(String internalName, JavaCompiler compiler, CapturingListener capturing, Elements elements) {
@@ -234,7 +236,7 @@ public class PostProcessorPlugin implements Plugin {
         return null;
     }
 
-    private static class CapturingListener implements TaskListener {
+    private static class CapturingListener {
         private final Map<String, TypeElement> NESTED_TYPE_ELEMENTS;
         private final JavacTask task;
 
@@ -243,18 +245,31 @@ public class PostProcessorPlugin implements Plugin {
             NESTED_TYPE_ELEMENTS = new HashMap<>();
         }
 
-        @Override
-        public void finished(TaskEvent e) {
-            if (e.getKind() == TaskEvent.Kind.GENERATE && e.getTypeElement().getNestingKind() == NestingKind.TOP_LEVEL) {
-                NESTED_TYPE_ELEMENTS.clear();
-            } else if (e.getKind() != TaskEvent.Kind.ANALYZE && e.getKind() != TaskEvent.Kind.GENERATE) {
-                return;
-            }
-            var typeElement = e.getTypeElement();
-            if (typeElement.getNestingKind() == NestingKind.ANONYMOUS || typeElement.getNestingKind() == NestingKind.LOCAL) {
-                String name = task.getElements().getBinaryName(typeElement).toString();
-                NESTED_TYPE_ELEMENTS.put(name, typeElement);
-            }
+        public TaskListener clearPostTopLevel() {
+            return new TaskListener() {
+                @Override
+                public void finished(TaskEvent e) {
+                    if (e.getKind() == TaskEvent.Kind.GENERATE && e.getTypeElement().getNestingKind() == NestingKind.TOP_LEVEL) {
+                        NESTED_TYPE_ELEMENTS.clear();
+                    }
+                }
+            };
+        }
+
+        public TaskListener addNested() {
+            return new TaskListener() {
+                @Override
+                public void finished(TaskEvent e) {
+                    if (e.getKind() != TaskEvent.Kind.ANALYZE && e.getKind() != TaskEvent.Kind.GENERATE) {
+                        return;
+                    }
+                    var typeElement = e.getTypeElement();
+                    if (typeElement.getNestingKind() == NestingKind.ANONYMOUS || typeElement.getNestingKind() == NestingKind.LOCAL) {
+                        String name = task.getElements().getBinaryName(typeElement).toString();
+                        NESTED_TYPE_ELEMENTS.put(name, typeElement);
+                    }
+                }
+            };
         }
     }
 }
